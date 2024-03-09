@@ -1,3 +1,5 @@
+from threading import Lock
+from threading import Thread
 ALIVE = '*'
 EMPTY = '_'
 
@@ -21,6 +23,32 @@ class Grid:
         for row in self.rows:
             matrix_str += " ".join(map(str, row)) + "\n"
         return matrix_str
+
+
+class LockingGrid(Grid):
+    def __init__(self, height, width):
+        super().__init__(height, width)
+        self.lock = Lock()
+
+    def __str__(self):
+        with self.lock:
+            return super().__str__()
+
+    def get(self, y, x):
+        with self.lock:
+            return super().get(y, x)
+
+    def set(self, y, x, state):
+        with self.lock:
+            return super().set(y, x, state)
+    # def __str__(self):
+    #     return super().__str__()
+
+    # def get(self, y, x):
+    #     return super().get(y, x)
+
+    # def set(self, y, x, state):
+    #     return super().set(y, x, state)
 
 
 def count_neighbors(y, x, get):  # 计算周围八个格子的alive数量
@@ -59,28 +87,23 @@ def step_cell(y, x, get, set):  # 更新单个网格状态的方法
     set(y, x, next_state)
 
 
-def simulate(grid): #更新整张网格的状态
-    next_grid = Grid(grid.height, grid.width)  # 注意，这里实例化了新的下一代类
+def simulate_threaded(grid): #更新整张网格的状态
+    next_grid = LockingGrid(grid.height, grid.width)
+    threads = []
     for y in range(grid.height):
         for x in range(grid.width):
-            step_cell(y, x, grid.get, next_grid.set)
+            args = (y, x, grid.get, next_grid.set)
+            thread = Thread(target=step_cell, args=args)  # 由于采用的是线程，故
+            thread.start()  # Fan out
+            threads.append(thread)
+
+    for thread in threads:
+        thread.join()   # Fan in
+
     return next_grid
 
-# class ColumnPrinter:
-#     def __init__(self):
-#         self.grid = Grid(5, 9)
-#         self.grid.set(0, 3, ALIVE)
-#         self.grid.set(1, 4, ALIVE)
-#         self.grid.set(2, 2, ALIVE)
-#         self.grid.set(2, 3, ALIVE)
-#         self.grid.set(2, 4, ALIVE)
 
-#     def __str__(self):
-#         return self.grid.__str__()
-
-
-
-grid = Grid(5, 9)
+grid = LockingGrid(5, 9)
 grid.set(0, 3, ALIVE)
 grid.set(1, 4, ALIVE)
 grid.set(2, 2, ALIVE)
@@ -88,6 +111,7 @@ grid.set(2, 3, ALIVE)
 grid.set(2, 4, ALIVE)
 
 
+# print(grid)
 for i in range(5):
     print(grid)
-    grid = simulate(grid)
+    grid = simulate_threaded(grid)
